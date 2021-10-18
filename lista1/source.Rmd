@@ -1,0 +1,28 @@
+---
+title: "Lista 1"
+author: "Piotr Wojcik"
+date: "10/12/2021"
+output: html_document
+---
+deadline: 25:10
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r code1, echo = TRUE, warning = FALSE, tidy = TRUE}
+#asp(asp = 1)
+cloud1 <- list()
+for(i in 1:100) {
+  cloud1[[i]] <- rnorm(2)
+}
+plot(sapply(cloud1, function(x){x[[1]]}),sapply(cloud1, function(x){x[[2]]}), asp = TRUE)
+```
+
+```{r code2, echo = TRUE, warning = FALSE, tidy = TRUE}
+mu <- c(4,2)
+sigma1 <- matrix(c(1, 0.9, 0.9, 1), nrow = 2, ncol = 2)
+
+A <- chol(sigma1) 
+```
+
+
