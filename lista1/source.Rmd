@@ -4,7 +4,6 @@ author: "Piotr Wojcik"
 date: "10/12/2021"
 output: html_document
 ---
-deadline: 25:10
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
