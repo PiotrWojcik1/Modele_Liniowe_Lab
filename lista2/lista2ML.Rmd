@@ -15,7 +15,7 @@ data <- read.table("CH01PR20.txt", col.names = c("time","quantity"))
 <h2>Zadanie 1</h2>
 <p>Analizę powyższych danych zaczniemy od wyznaczenia ich na wykresie, gdzie pionowa oś będzie czasem(w godzinach) konserwacji, natomiast pozioma, ilością kserokopiarek.</p>
 ```{r plot_data1, echo = TRUE, warning = FALSE, tidy = TRUE}
-plot(data$quantity, data$time, main = NULL, ylab = "czas(h)", xlab = "ilość(szt)", col = "blue", pch = 19)
+plot(data$quantity, data$time, main = NULL, ylab = "czas(h)", xlab = "ilość(szt)", col = "#16ab43", pch = 19)
 ```
 <p>Patrząc na wykres można zauważyć, że dane w przybliżeniu układają się w pewną prostą, którą będziemy w kolejnym zadaniu wyznaczać.</p>
 
@@ -86,9 +86,9 @@ $$
 <p>Dostajemy stąd, że $\small \mu_{11} = `r round(beta0 + beta1*11 ,3)`$. Co zdaje się zgadzać z wykresem naszej relacji:</p>
 ```{r plot_with_pred_point, echo = TRUE, warning = FALSE, tidy = TRUE}
 mu_11 <- beta0 + beta1*11
-colors = c(sapply(1:45, function(x)"#611a99"),"red")
+colors = c(sapply(1:45, function(x)"#16ab43"),"#f110dd")
 plot(c(data$quantity, 11), c(data$time, mu_11), main = NULL, ylab = "czas(h)", xlab = "ilość(szt)", col = colors, pch = 19, xlim = c(0,12))
-lines(seq(0,20,by=10), beta0 + beta1*seq(0,20,by=10), col = "#1e991a", lwd = 2)
+lines(seq(0,20,by=10), beta0 + beta1*seq(0,20,by=10), col = "#2e3f91", lwd = 2)
 ```
 <p>Mając już $\small \hat{\mu_{11}}$, możemy wyznaczyć nasz przedział ufności, który jest postaci:</p>
 $$
@@ -128,3 +128,59 @@ $$
 [`r round(mu_11 - tc*s_Y_11, 3)`, `r round(mu_11 + tc*s_Y_11, 3)`].
 $$
 <p>Jak widać, przedział jaki uzyskaliśmy jest bardzo szeroki. Było oczywistym, że będzie on szerszy od tego w poprzednim zadaniu, gdyż wcześniej znaczny wpływ miały pozostałe dane, mianowicie, przewidywaliśmy ich średnią. W tym przypadku przewidujemy wartość poszczególnego wyrazu, co zwiększa nasze możliwości dobrania wyrazu $\small Y_{11}$.</p>
+
+<h2>Wbudowane komendy</h2>
+<p>W poniższym zadaniu zweryfikujemy wszystkie powyższe rozważania z zadań 2, 3 i 4 za pomocą wbudowanych komend w <em>R</em>. Wyniki zaprezentujemy w poniższej tabelce:</p>
+```{r summary_for_ex, echo = TRUE, warning = FALSE, tidy = TRUE}
+model <- lm(time~quantity, data)
+predict_mu_11 <-predict(model, data.frame(quantity = c(11)), interval = "confidence")
+predict_Y_11 <-predict(model, data.frame(quantity = c(11)), interval = "prediction")
+column1 <- c(model$coefficients, confint(model)[2,1], confint(model)[2,2], predict_mu_11, predict_Y_11)
+column2 <- c(beta0, beta1, beta1-tc*s_beta1, beta1+tc*s_beta1, mu_11, mu_11-tc*s_mu_11, mu_11+tc*s_mu_11, mu_11, mu_11-tc*s_Y_11, mu_11+tc*s_Y_11)
+table <- data.frame(column1, column2)
+rows <- c("$\\beta_0$", "$\\beta_1$", "$\\beta_1 Lconf$", "$\\beta_1 Rconf$", "$\\mu_{11}$", "$\\mu_{11} Lconf$", "$\\mu_{11} Rconf$", "$Y_{11}$", "$Y_{11} Lpred$", "$Y_{11} Rpred$")
+row.names(table) <- rows
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("Komendy","Ręcznie"))
+```
+<p>Jak widać dane jakie uzyskaliśmy w poprzednich zadaniach są takie same jak te z wykorzystaniem komend w <em>R</em>, stąd wniosek, że wszystkie obliczenia wykonaliśmy prawidłowo.</p>
+
+<h2>Zadanie 5</h2>
+<p>W poniższym zadaniu wyznaczymy 95% pasmo ufności dla naszych danych i zaznaczymy je na wykresie.</p>
+```{r pred_bounds, echo = TRUE, warning = FALSE, tidy = TRUE, fig.height = 7, fig.width = 10}
+prediction <- predict(model, se.fit=TRUE)
+se_fit <-prediction$se.fit
+fit <- prediction$fit
+w <- sqrt(2 * qf(1-0.05, 2, dim(data)[1]-2))
+upper_line <- sort(fit + w*se_fit)
+lower_line <- sort(fit - w*se_fit)
+plot(data$quantity, data$time, main = NULL, ylab = "czas(h)", xlab = "ilość(szt)", col = "#16ab43", pch = 19)
+points(sort(data$quantity), sort(fit),type='l', col = "#2e3f91", lwd = 2);
+points(sort(data$quantity), upper_line,type='l',col='#42b8e7', lwd = 2)
+points(sort(data$quantity), lower_line,type='l',col='#42b8e7', lwd = 2)
+```
+<p>Jak widać, prosta przybliżająca nasze wartości znajduje się pomiędzy pasmami ufności, choć wiele obserwacji jest poza nimi.</p>
+
+<h2>Zadanie 6</h2>
+<p>W poniższym zadaniu korzystając z danych: $\small n = 40$, $\small \sigma^2 = 120$ i $\small SSX = 1000$ wyznaczymy wartość odrzucającą hipotezę zerową mówiącą, że współczynnik $\small \beta_1$ wynosi zero, wykorzystując poziom istotności $\small \alpha = 0.05$, kiedy prawdziwa wartość wynosi $\small \beta_1 = 1$.</p>
+```{r ex6_1, echo = TRUE, warning = FALSE, tidy = TRUE}
+test_power_fun <- function(n = 40, SSX = 1000, s2 = 120, beta_1 = 1) {
+  s_beta1 <- sqrt(s2 / SSX)
+  T <- beta_1 / s_beta1
+  tc <- qt(1 - 0.05/2, df = n - 2)
+  return(pt(-tc, df = n - 2, ncp = T) + 1 - pt(tc, df = n - 2, ncp = T))
+}
+power_for_beta_1 <- test_power_fun()
+
+```
+<p>Z powyższych obliczeń uzyskujemy, że z około 80% pewnością możemy odrzucić hipotezę, że $\small \beta_1 = 0$. Jest to wynik jakiego moglibyśmy się spodziewać, ponieważ prawdziwa wartość $\small \beta_1 = 1$ jest całkiem odległa od zera. Dokładna wartości wynosi `r power_for_beta_1`.</p>
+<p>Wyznaczymy teraz wartości funkcji mocy testu dla wartości $\small \beta_1$ z przedziału $\small (-2, \ 2)$ i narysujemy je na wykresie.</p>
+```{r power_plot, echo = TRUE, warning = FALSE, tidy = TRUE}
+power_fun_values <- sapply(seq(-2, 2, by = 0.01), function(x) test_power_fun(beta_1 = x))
+plot(seq(-2, 2, by = 0.01), power_fun_values, type = "l", main = NULL, xlab = "prawdziwe wartości beta_1", ylab = "Moc testu", lwd = 2, col = "#6e08a5")
+```
+<p>Jak można się spodziwać, im bliżej zera tym ciężej obalić hipotezę, że $\small \beta_1 = 0$. Natomiast oddalając się od argumentu $\small 0$, wartości symetrycznie oddalają się od zera, gdzie w okoliach 1.5 oraz -1.5 argumenty osiągają już wartości bliskie 1, co jest jednoznaczne z dużą mocą obalenia hipotezy zerowej na rzecz hipotezy altenatywnej, że $\small \beta_1 \neq 0$.</p>
+
+
+
+
+
