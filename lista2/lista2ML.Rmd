@@ -146,17 +146,27 @@ knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "
 
 <h2>Zadanie 5</h2>
 <p>W poniższym zadaniu wyznaczymy 95% pasmo ufności dla naszych danych i zaznaczymy je na wykresie.</p>
-```{r pred_bounds, echo = TRUE, warning = FALSE, tidy = TRUE, fig.height = 7, fig.width = 10}
+```{r pred_bounds, echo = TRUE, warning = FALSE, fig.height = 7, fig.width = 10}
 prediction <- predict(model, se.fit=TRUE)
 se_fit <-prediction$se.fit
 fit <- prediction$fit
 w <- sqrt(2 * qf(1-0.05, 2, dim(data)[1]-2))
 upper_line <- sort(fit + w*se_fit)
 lower_line <- sort(fit - w*se_fit)
+
+s_pred <- sapply(1:15, function(x)sqrt(s2_Y(x, data$quantity, sigma)))
+s_fit <- sapply(1:15, function(x)sqrt(s2_mu(x, data$quantity, sigma)))
+fits <- predict(model, data.frame(quantity = 1:15))
+tc <- qt(1-0.05/2, df = length(data$quantity) - 2)
+
 plot(data$quantity, data$time, main = NULL, ylab = "czas(h)", xlab = "ilość(szt)", col = "#16ab43", pch = 19)
 points(sort(data$quantity), sort(fit),type='l', col = "#2e3f91", lwd = 2);
 points(sort(data$quantity), upper_line,type='l',col='#42b8e7', lwd = 2)
 points(sort(data$quantity), lower_line,type='l',col='#42b8e7', lwd = 2)
+points(1:15, s_pred*tc + fits, col = "red", type = "l", lwd = 2)
+points(1:15, -s_pred*tc + fits, col = "red", type = "l", lwd = 2)
+points(1:15, s_fit*tc + fits, col = "orange", type = "l", lwd = 2)
+points(1:15, -s_fit*tc + fits, col = "orange", type = "l", lwd = 2)
 ```
 <p>Jak widać, prosta przybliżająca nasze wartości znajduje się pomiędzy pasmami ufności, choć wiele obserwacji jest poza nimi.</p>
 
@@ -180,7 +190,11 @@ plot(seq(-2, 2, by = 0.01), power_fun_values, type = "l", main = NULL, xlab = "p
 ```
 <p>Jak można się spodziwać, im bliżej zera tym ciężej obalić hipotezę, że $\small \beta_1 = 0$. Natomiast oddalając się od argumentu $\small 0$, wartości symetrycznie oddalają się od zera, gdzie w okoliach 1.5 oraz -1.5 argumenty osiągają już wartości bliskie 1, co jest jednoznaczne z dużą mocą obalenia hipotezy zerowej na rzecz hipotezy altenatywnej, że $\small \beta_1 \neq 0$.</p>
 
-
+#zad 7
+#wygenerować wektor 200 wymiarowy, przekształcić afinicznie, przetestować hipotezę H_0: b_1 = 0 i powtórzyć to 1000 razy, generując wektor 1000 elementowy z zerami i jedynkami, gdzie 1 oznacza obalenie hipotezy zerowej. Obliczyć frakcję jedynek i ta frakcja oznacza:
+#a) prawdopodobieństwo błedu pierwszego rodzaju
+#c) moc testu
+#Potem porównać z teoretycznymi obliczeniami.
 
 
 
