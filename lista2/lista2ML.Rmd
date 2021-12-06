@@ -168,7 +168,7 @@ points(1:15, -s_pred*tc + fits, col = "red", type = "l", lwd = 2)
 points(1:15, s_fit*tc + fits, col = "orange", type = "l", lwd = 2)
 points(1:15, -s_fit*tc + fits, col = "orange", type = "l", lwd = 2)
 ```
-<p>Jak widać, prosta przybliżająca nasze wartości znajduje się pomiędzy pasmami ufności, choć wiele obserwacji jest poza nimi.</p>
+<p>Jak widać, prosta przybliżająca nasze wartości(granatowa) znajduje się pomiędzy pasmem ufności(cyjanowy), choć wiele obserwacji jest poza nim. Na wykresie znajdują się również przedziały predyjcyjne(czerowne), oraz przedziały ufności(pomarańczowe). Warto zwrócić uwagę, że żadne z nich się nie przecinają, oraz na to, że interesująco się zawierają.</p>
 
 <h2>Zadanie 6</h2>
 <p>W poniższym zadaniu korzystając z danych: $\small n = 40$, $\small \sigma^2 = 120$ i $\small SSX = 1000$ wyznaczymy wartość odrzucającą hipotezę zerową mówiącą, że współczynnik $\small \beta_1$ wynosi zero, wykorzystując poziom istotności $\small \alpha = 0.05$, kiedy prawdziwa wartość wynosi $\small \beta_1 = 1$.</p>
@@ -190,11 +190,44 @@ plot(seq(-2, 2, by = 0.01), power_fun_values, type = "l", main = NULL, xlab = "p
 ```
 <p>Jak można się spodziwać, im bliżej zera tym ciężej obalić hipotezę, że $\small \beta_1 = 0$. Natomiast oddalając się od argumentu $\small 0$, wartości symetrycznie oddalają się od zera, gdzie w okoliach 1.5 oraz -1.5 argumenty osiągają już wartości bliskie 1, co jest jednoznaczne z dużą mocą obalenia hipotezy zerowej na rzecz hipotezy altenatywnej, że $\small \beta_1 \neq 0$.</p>
 
-#zad 7
-#wygenerować wektor 200 wymiarowy, przekształcić afinicznie, przetestować hipotezę H_0: b_1 = 0 i powtórzyć to 1000 razy, generując wektor 1000 elementowy z zerami i jedynkami, gdzie 1 oznacza obalenie hipotezy zerowej. Obliczyć frakcję jedynek i ta frakcja oznacza:
-#a) prawdopodobieństwo błedu pierwszego rodzaju
-#c) moc testu
-#Potem porównać z teoretycznymi obliczeniami.
+<h2>Zadanie 7</h2>
+<p>W poniższym zadaniu wygenerujemy wektor $\small X$ z wielowymiarowego rozkładu normalnego $\small N(0, \frac{1}{200}I)$. Następnie wygenerujemy 1000 wektorów $\small Y$ z modelu $\small Y = 5 + \beta_1 X + \epsilon$, gdzie:</p>
+<ul>
+<li>$\small \beta_1 = 0, \ \epsilon \sim N(0,I)$,</li>
+<li>$\small \beta_1 = 0, \ \epsilon_1, \ldots, \epsilon_{200}$ są iid z rozkładu wykładniczego o parametrze $\small \lambda = 1$,</li>
+<li>$\small \beta_1 = 1.5, \ \epsilon \sim N(0,I)$,</li>
+<li>$\small \beta_1 = 1.5, \ \epsilon_1, \ldots, \epsilon_{200}$ są iid z rozkładu wykładniczego o parametrze $\small \lambda = 1$.</li>
+</ul>
+<p>Dla każdego z powyższych przypadków przetestujemy hipotezę $\small H_0: \beta_1 = 0$ i wyestymujemy prawdopodobieństwo jej odrzucenia, licząc frakcję odrzuceń w poszczególnej próbie. Przy czym dla pierwszych dwóch podpunktów jest to prawdopodobieństwo <em>błędu pierwszego rodzaju</em>, natomiast dla pozostałych to <em>moc testu</em>.</p>
 
+```{r ex7test, echo = TRUE, warning = FALSE, tidy = TRUE}
 
+tc <- qt(1-0.05/2, df = 200 - 2)
 
+freq_test <- function(epsilon_dist, parameters = list(), beta1, n) {
+  test_freq <- 0
+  for (i in 1:n) {
+    X <- rnorm(200, mean = 0, sd = sqrt(1/200))
+    epsilon <- do.call(epsilon_dist, parameters)
+    Y <- 5 + beta1*X + epsilon
+    sigma <- sqrt(sigma2_estimator(X,Y))
+    s_beta1 <- sqrt(s2_beta1_function(X, sigma))
+    beta1_est <- B1_estimator(X,Y)
+
+    if(abs(beta1_est/s_beta1) > tc) test_freq <- test_freq + 1
+  }
+  return(test_freq/n)
+}
+
+freq_1 <- freq_test(rnorm, list(200), 0, 1000)
+freq_2 <- freq_test(rexp, list(200), 0, 1000)
+freq_3 <- freq_test(rnorm, list(200), 1.5, 1000)
+freq_4 <- freq_test(rexp, list(200), 1.5, 1000)
+```
+<p>Dla pierwszych dwóch przypadków prawdopodobieństwo błędu pierwszego rodzaju jest zbliżone i wynosi: `r freq_1` dla pierwszego przypadku, oraz `r freq_2` dla drugiego. Intuicyjnie jest to wynik jakiego oczekiwaliśmy, gdyż testy były przeprowadzone na poziomie istotności $\small \alpha = 0.05$. Dla pozostałych przypadków też uzyskaliśmy zbliżone wyniki, mianowicie: `r freq_3` dla trzeciego przypadku, oraz `r freq_4` dla ostatniego.</p>
+<p>Porównamy teraz uzyskane wyniki z teoretycznymi obliczeniami. W pierwszych dwóch przypadkach jest to <em>błąd pierwszego rodzaju</em>, czyli:</p>
+$$
+P(odrzucenie \ H_0 \ | \ \beta_1 = 0) = \alpha
+$$
+<p>W ostatnich dwóch przypadkach mamy do czynienia z <em>mocą testu</em>, czyli prawdopodobieństwo odrzucenia hipotezy $\small H_0$, gdy rzeczywiście ona nie zachodzi. Moglibyśmy się w takim razie spodziewać lepszych wyników, zważając że za $\small \beta_1$ przyjeliśmy 1.5. Jednak poprzez dobór $\small X$ z rozkładu $\small N(0, \frac{1}{200}I)$, sprawiliśmy, że błędy zdominowały relację i sprawiły, że wyestymowany parametr $\small \hat{\beta_1}$ jest bliski zera, przez co ciężej jest odrzucić $\small H_0$.</p>
+<p>Warto zwrócić uwagę, że zmianna błędu ze standardowego normalnego, który znajduje się w przyjmowanej przez nas definicji regresji liniowej, na błąd z rozkładu wykładniczego z parametrem $\small \lambda = 1$ nie zmienia znacząco wyników. Warto też zwrócić uwagę, że utworzone przez nas modele we wszystkich powyższych przypadkach nie są właściwie liniowe. Widać to od razu analizując wykresy owych relacji.</p>
