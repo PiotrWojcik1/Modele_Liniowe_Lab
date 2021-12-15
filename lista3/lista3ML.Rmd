@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
 ```
 <p>W poniższych dwóch zadaniach będziemy analizować zbiór danych zawierający informacje o pewnych uczniach z siódmej klasy. Zawiera on informacje o średniej uczniów(GPA), punktach uzyskanych z testu IQ, płci oraz wyniku z testu psychologicznego <em>Piers-Harris Childrens Self-Concept Scale</em>.</p>
 ```{r loadData1, echo = TRUE, warning = FALSE, tidy = TRUE}
@@ -223,3 +224,135 @@ qqline(model_ol$residuals)
 SW_test <- shapiro.test(model_ol$residuals)
 ```
 <p>P-wartość jaką uzyskaliśmy wynosi $\small `r SW_test$p.value` < 0.05$, stąd jak mogliśmy się spodziewać, odrzucamy hipotezę, że rozkład residuów jest normalny.</p>
+
+<p>Przez następne zadania będziemy korzystać ze zbioru danych opisującego stężenie molowe roztworu, gdzie pierwsza kolumna opisuje stężenie, natomiast druga kolumna opisuje czas.</p>
+```{r data_solution, echo = TRUE, warning = FALSE, tidy = TRUE}
+solution <- read.table("CH03PR15.txt", header = FALSE, col.names = c("concentration", "time"))
+```
+
+<h2>Zadanie 7 i 8</h2>
+<p>W poniższym zadaniu dopasujemy prostą regresji do relacji, gdzie zmienną objaśniającą jest czas, natomiast zmienną objaśnianą stężenie roztworu. Następnie przedstawimy wykres tej relacji wraz z dopasowaną prostą regresji, oraz 95% pasmem predykcyjnym utworzonym jak w zadaniu 3, w celu wstępnego przeanalizowania czy nasz model ma sens.</p>
+```{r ex7model, echo = TRUE, warning = FALSE, tidy = TRUE}
+model <- lm(concentration~time, solution)
+predictions <- predict(model, data.frame(time = seq(-2,12,by=0.5)), interval = "prediction", level = 0.95)
+
+plot(solution$time, solution$concentration, xlab = "czas", ylab = "stężenie", xlim = c(0,10))
+lines(seq(-2,13,by=5), model$coefficients[1] + model$coefficients[2]*seq(-2,13,by=5), tyle = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,2], type = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,3], type = "l", lwd = 2)
+```
+<p>Wyraźnie widać, że model słabo sobie poradził z dopasowaniem prostej regresji. Można więc wstępnie uznać nasz model za mało użyteczny. Pomimo tego, przeanalizujmy podstawowe własności naszego modelu. Wyniki przedstawimy w tabelce poniżej:</p>
+```{r ex7_table, echo = TRUE, warning = FALSE, tidy = TRUE}
+summary_model <- summary(model)
+
+table <- data.frame("$\\beta_0$" = model$coefficients[1], "$\\beta_1$" = model$coefficients[2], "$R^2$" = summary_model$r.squared, "t-value" = summary_model$coefficients[2,3], "p-value" = summary_model$coefficients[2,4], "cor" = -sqrt(summary_model$r.squared), "s" = summary_model$sigma)
+row.names(table) <- "values"
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("$\\beta_0$", "$\\beta_1$", "$R^2$", "t-value", "p-value", "correlation", "s"))
+```
+<p>Jak widać, wartości przedstawione w tabelce nie dają wystarczającej informacji o modelu, ponieważ pomimo wyraźnego problemu jaki zaobserwowaliśmy na wykresie, wartości jakie uzyskaliśmy są bardzo dobre. Widać to głównie po współczynniku determinacji $\small R^2$, który mówi, że dobrany model ma opisywać aż 81% naszej relacji. Ze współczynnika determiacji otrzymujemy korelację próbkową wynoszącą aż -0.9, która sugeruje silną relację liniową. Warto też zwrócić uwagę na p-wartość testu istotności współczynnika kierunkowego $\small \beta_1$ która jest również bardzo zadawalająca. Podsumowując, nigdy nie powinniśmy ufać samym wartościom liczbowym uzyskanym z modelu.</p>
+
+<h2>Zadanie 9</h2>
+<p>Przyglądając się wykresowi relacji możemy zaobserwować, że pomimo iż nasza relacja nie jest liniowa, to posiada pewną strukturę. Warto więc skorzystać z procedury <em>Box-Cox</em> w celu znalezienia transformacji która po nałożeniu na nasz model będzie już przybliżać prawidłowo naszą relację.</p>
+```{r box_cox_ex9, echo = TRUE, warning = FALSE, tidy = TRUE}
+box_cox_value <- boxcox(solution$concentration~solution$time)$x[which.max(boxcox(solution$concentration~solution$time)$y)]
+```
+<p>Wykres funkcji wiarygodności ma maksimum w $\small `r box_cox_value`$. Ponieważ jest to wartość bliska zera, powinniśmy użyć przekształcenia logarytmicznego na zmiennej objaśnianej $\small Y$.</p>
+
+<h2>Zadanie 10</h2>
+<p>W poniższym zadaniu skorzystamy z tego co wyznaczyliśmy w poprzednim. Wygenerujemy zmienną $\small Z = \log{Y}$, gdzie $\small Y$ jest zmienną objaśniającą z poprzednich zadań. Następnie skonstruujemy model dla tej zmiennej.</p>
+```{r log_fun_ex10, echo = TRUE, warning = FALSE, tidy = TRUE}
+Z <- log(solution$concentration)
+ZXsolution <- data.frame(concentration = Z, time = solution$time)
+ZX_model <- lm(concentration~time, ZXsolution)
+```
+<p>Analizę powyższej regresji zaczniemy od narysowania jej wykresu z prostą regresji oraz 95% przedziałem predykcyjnym konstruowanym jak wcześniej.</p>
+```{r plot_ex10, echo = TRUE, warning = FALSE, tidy = TRUE}
+predictions <- predict(ZX_model, data.frame(time = seq(-2,12,by=0.5)), interval = "prediction", level = 0.95)
+
+plot(ZXsolution$time, ZXsolution$concentration, xlab = "czas", ylab = "log(stężenie)", xlim = c(0,10))
+lines(seq(-2,13,by=5), ZX_model$coefficients[1] + ZX_model$coefficients[2]*seq(-2,13,by=5), tyle = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,2], type = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,3], type = "l", lwd = 2)
+```
+<p>Wykres sugeruje, że transformacja jaką dobraliśmy jest bardzo dobra. Możemy to zaobserwować po tym jak punkty są blisko prostej regresji, oraz po wąskich pasmach predykcyjnych, które sugerują małą wariancję. Przeanalizujemy to lepiej wyznaczając podstawowe informacje z modelu. Wyniki zaprezentujemy w tabelce poniżej:</p>
+```{r table_ex10, echo = TRUE, warning = FALSE, tidy = TRUE}
+summary_ZX_model <- summary(ZX_model)
+
+table <- data.frame("$\\beta_0$" = ZX_model$coefficients[1], "$\\beta_1$" = ZX_model$coefficients[2], "$R^2$" = summary_ZX_model$r.squared, "t-value" = summary_ZX_model$coefficients[2,3], "p-value" = summary_ZX_model$coefficients[2,4], "cor" = -sqrt(summary_ZX_model$r.squared), "s" = summary_ZX_model$sigma)
+row.names(table) <- "values"
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("$\\beta_0$", "$\\beta_1$", "$R^2$", "t-value", "p-value", "correlation", "s"))
+```
+<p>Statystyki jakie uzyskaliśmy potwierdzają nasze przewidywania. Widać to w szczególności po wspołczynniku determinacji który wynosi prawie 1. W związku z tym próbkowa korelacja jest też bardzo dobra. Próbkowe odchylenie standardowe $\small s$ jest czterokrotnie mniejsze od tego jakie uzyskaliśmy przy poprzednim modelu, stąd mamy bardzo małą p-wartość dla testu istotności współczynnika kierunkowego $\small \beta_1$. Ostatecznie można stwierdzić, że uzyskany przez nas model jest bardzo dobry.</p>
+
+<h2>Zadanie 11</h2>
+<p>Poniższe zadanie zaczniemy od wyznaczenia na wykresie relacji przed przekształceniem zmiennej objaśnianej $\small Y$ na zmienną $\small Z$. Zastosujemy jednak przekształcenie odwrotne $\small \log^{-1}(y) = e^y$ na prostej regresji oraz paśmie predykcyjnym.</p>
+```{r plot_ex11, echo = TRUE, warning = FALSE, tidy = TRUE}
+predictions <- predict(ZX_model, data.frame(time = seq(-2,12,by=0.5)), interval = "prediction", level = 0.95)
+
+plot(solution$time, solution$concentration, xlab = "czas", ylab = "stężenie", xlim = c(0,10))
+lines(seq(-2,13,by=0.1), exp(ZX_model$coefficients[1] + ZX_model$coefficients[2]*seq(-2,13,by=0.1)), tyle = "l", lwd = 2, col = "green")
+lines(seq(-2, 12, by = 0.5), exp(predictions[,2]), type = "l", lwd = 2, col = "Blue")
+lines(seq(-2, 12, by = 0.5), exp(predictions[,3]), type = "l", lwd = 2, col = "Red")
+```
+<p>Jak widać, "prosta" regresji zamieniła się na krzywą wykładniczą, jak i krańce pasm ufności, gdzie na prawym końcu się zawężają a na lewym rozszerzają. Warto zwrócić uwagę na fakt, że teraz tak dobrany model doskonale przybliża naszą relację, oraz właściwie wszystkie obserwacje znajdują się między pasmem ufności.</p>
+<p>Interesującym jest w takim razie związek zmiennej $\small Y$ oraz zmiennej $\small e^{\hat{Z}}$. Zbadamy to licząc korelację między nimi.</p>
+```{r cor_ex11, echo = TRUE, warning = FALSE, tidy = TRUE}
+correlation <- cor(solution$concentration, exp(ZX_model$fitted.values))
+```
+<p>Uzyskujemy, że korelacja $\small corr\left(Y,e^{\hat{Z}}\right)$ wynosi $\small `r correlation`$, stąd wynika silna zależność liniowa między tymi zmiennymi.</p>
+
+<h2>Zadanie 12</h2>
+<p>W poniższym zadaniu weźmiemy nową zmienną objaśniającą $\small X_1 = X^{-1/2}$, gdzie zmienna $\small X$ to zmienna objaśniająca z zadania 7. Za jej pomocą skonstruujemy nowy model regresji liniowej, gdzie zmienną objaśnianą $\small Y$ weźmiemy z zadania 7.</p>
+```{r Y-X_1, echo = TRUE, warning = FALSE, tidy = TRUE}
+YX1_solution <- data.frame(Y = solution$concentration, X1 = (solution$time)^(-1/2))
+YX1_model <- lm(Y~X1, YX1_solution)
+```
+<p>Jak w poprzednich zadaniach wyznaczymy na wykresie powyższą relację wraz z prostą regresji oraz pasmem ufności:</p>
+```{r Y-X_1_plot, echo = TRUE, warning = FALSE, tidy = TRUE}
+predictions <- predict(YX1_model, data.frame(X1 = seq(-2,12,by=0.5)), interval = "prediction", level = 0.95)
+
+plot(YX1_solution$X1, YX1_solution$Y, xlab = "X_1", ylab = "Y", xlim = c(0.2,1))
+lines(seq(-2,13,by=5), YX1_model$coefficients[1] + YX1_model$coefficients[2]*seq(-2,13,by=5), tyle = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,2], type = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,3], type = "l", lwd = 2)
+```
+<p>Wyznaczymy teraz kolejny model, gdzie zmienną objaśniającą zostanie $\small X_1$, natomiast zmienną objaśnianą będzie zmienna $\small Z$ z zadania 10.</p>
+
+```{r Z-X_1, echo = TRUE, warning = FALSE, tidy = TRUE}
+ZX1_solution <- data.frame(Z = Z, X1 = (solution$time)^(-1/2))
+ZX1_model <- lm(Z~X1, ZX1_solution)
+```
+<p>Ponownie wyznaczymy na wykresie powyższą relację wraz z prostą regresji oraz pasmem ufności:</p>
+```{r Z-X_1_plot, echo = TRUE, warning = FALSE, tidy = TRUE}
+predictions <- predict(ZX1_model, data.frame(X1 = seq(-2,12,by=0.5)), interval = "prediction", level = 0.95)
+
+plot(ZX1_solution$X1, ZX1_solution$Z, xlab = "X_1", ylab = "Z", xlim = c(0.2,1))
+lines(seq(-2,13,by=5), ZX1_model$coefficients[1] + ZX1_model$coefficients[2]*seq(-2,13,by=5), tyle = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,2], type = "l", lwd = 2)
+lines(seq(-2, 12, by = 0.5), predictions[,3], type = "l", lwd = 2)
+```
+<p>Porównując oba wykresy, to najużyteczniejszy wydaje się tylko pierwszy model, gdzie widać, że relacja jaką uzyskaliśmy jest rzeczywiście liniowa. Drugi wykres natomiast wyraźnie odbiega od relacji liniowej.</p>
+<p>W ten sposób od zadania 7 do teraz wygenerowaliśmy 4 modele regresji liniowej. Porównamy je teraz wszystkie, wypisując podstawowe statystyki w poniższej tabelce:</p>
+```{r table_ex12, echo = TRUE, warning = FALSE, tidy = TRUE}
+summary_ZX1_model <- summary(ZX1_model)
+summary_YX1_model <- summary(YX1_model)
+
+column1 <- c(summary_model$coefficients[1], summary_ZX_model$coefficients[1], summary_YX1_model$coefficients[1], summary_ZX1_model$coefficients[1])
+column2 <- c(summary_model$coefficients[2], summary_ZX_model$coefficients[2], summary_YX1_model$coefficients[2], summary_ZX1_model$coefficients[2])
+column3 <- c(summary_model$r.squared, summary_ZX_model$r.squared, summary_YX1_model$r.squared, summary_ZX1_model$r.squared)
+column4 <- c(summary_model$coefficients[2,3], summary_ZX_model$coefficients[2,3], summary_YX1_model$coefficients[2,3], summary_ZX1_model$coefficients[2,3])
+column5 <- c(summary_model$coefficients[2,4], summary_ZX_model$coefficients[2,4], summary_YX1_model$coefficients[2,4], summary_ZX1_model$coefficients[2,4])
+column6 <- c(-sqrt(summary_model$r.squared), -sqrt(summary_ZX_model$r.squared), -sqrt(summary_YX1_model$r.squared), -sqrt(summary_ZX1_model$r.squared))
+column7 <- c(summary_model$sigma, summary_ZX_model$sigma, summary_YX1_model$sigma, summary_ZX1_model$sigma)
+
+table <- data.frame(column1, column2, column3, column4, column5, column6, column7)
+
+row.names(table) <- c("$Y\\sim X$", "$Z\\sim X$", "$Y\\sim X_1$", "$Z\\sim X_1$")
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("$\\beta_0$", "$\\beta_1$", "$R^2$", "t-value", "p-value", "correlation", "s"))
+```
+<p>Podsumowując uzyskane wyniki, widzimy, że model z zadania 10 ($\small Z \sim X$) jest najlepszy, choć porównywalny z modelem pierwszym z tego zadania ($\small Y \sim X_1$). Statystyki w obu przypadkach są bardzo zbliżone, więc można uznać, że oba są równie dobre. Najgorszym okazał się drugi model z tego zadania ($\small Z \sim X_1$), gdzie możemy zauważyć duże odstępstwa w odchyleniu standardowymw porównaniu do poprzednich modeli.</p>
+
+
+
+
+
