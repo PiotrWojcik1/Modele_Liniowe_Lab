@@ -1,0 +1,321 @@
+---
+title: "Raport 4"
+author: "Piotr Wójcik"
+date: "30 12 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library("car")
+set.seed(1)
+```
+<font size="+0.5">
+<h2>Zadanie 3</h2>
+<p>W poniższym zadaniu wygenerujemy macierz $\small X_{100\times2}$ taką że, jej wiersze są niezależnymi wektorami losowymi o rozkładzie $\small N(0, \Sigma/100)$, gdzie:</p>
+$$
+\Sigma = \begin{bmatrix}1 & 0.9 \\ 0.9 & 1 \end{bmatrix}.
+$$
+<p>Wykorzystamy ją do stworzenia zmiennej odpowiedzi $\small Y = \beta_1 X_1 + \epsilon$, gdzie $\small \beta_1 = 3$, $\small X_1$ jest pierwszą kolumną macierzy $\small X$ oraz $\epsilon$ jest błędem losowym o rozkładzie $\small N(0,I)$.</p>
+```{r matrix_gen, echo = TRUE, warning = FALSE, tidy = TRUE}
+sigma <- matrix(c(1,0.9,0.9,1),2,2)
+X <- vapply(1:100, function(x) mvrnorm(1, c(0,0), sigma/100), matrix(numeric(2),1,2))
+X <- matrix(c(X[seq(1,200,2)], X[seq(2,200,2)]), 100, 2)
+Y <- 3*X[,1] + rnorm(100)
+```
+<p>Wykorzystamy naszą nową zmienną $\small Y$ do skonstruowania 95% przedziału ufności dla parametru $\small \beta_1$ oraz przeprowadzenia testu istotności dla parametru $\small \beta_1$ na poziomie istotności 0.05 wykorzystując prostą regresję liniową $\small Y = \beta_0 + \beta_1 X_1 + \epsilon$, oraz regresję z dwoma zmiennymi objaśniającymi $\small Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \epsilon$.</p>
+```{r}
+model1 <- lm(Y~X[,1])
+model1_confint <- confint(model1)[2,]
+model1_summary <- summary(model1)
+model1_pvalue <- model1_summary$coefficients[2,4] #p-value
+
+#####model2 <- lm(Y~X[,1]+X[,2])
+
+s_fun <- function(Y, plan_matrix, beta) {
+  return(sqrt(1/(length(Y)-length(beta)))*norm(Y-plan_matrix%*%beta, type = "2"))
+}
+
+s2_beta_fun <- function(sd_est, plan_matrix) {
+  return(sd_est^2*solve(t(plan_matrix)%*%plan_matrix))
+}
+
+beta_fun <- function(plan_matrix, Y) {
+  return(solve(t(plan_matrix)%*%plan_matrix)%*%t(plan_matrix)%*%Y)
+} 
+
+plan_matrix <- matrix(c(rep(1,100), X[,1], X[,2]), 100, 3)
+beta <- beta_fun(plan_matrix, Y)
+sd_est <- s_fun(Y, plan_matrix, beta)
+s2_beta_est <- s2_beta_fun(sd_est, plan_matrix)
+
+model2_confint <- c(beta[2] - qt(1-(0.05)/2, 97)*sqrt(s2_beta_est[2,2]),beta[2] + qt(1-(0.05)/2, 97)*sqrt(s2_beta_est[2,2])) 
+
+model2_t_statistic <- beta[2]/sqrt(s2_beta_est[2,2])
+###abs(model2_t_statistic) > qt(1 - (0.05)/2, 97)
+```
+<p>Dla prostej regresji liniowej 95% przedział ufności dla parametru $\small \beta_1$ jest postaci:</p>
+$$
+\left[ `r model1_confint[1]` \ , \ `r model1_confint[2]`\right].
+$$
+<p>Natomiast przedział unfości dla modelu z 2 zmiennymi objaśniającymi dla parametru $\small \beta_1$ jest postaci:</p>
+$$
+\left[ `r model2_confint[1]` \ , \ `r model2_confint[2]`\right].
+$$
+<p>Widać wyraźną różnicę w szerokości uzyskanych przedziałów, mianowicie, przedział dla modelu z dwoma zmiennymi jest znacznie szerszy, jest to spowodowane większym odchyleniem standardowym $\small \beta_1$ dla drugiego modelu. Wynosi ono $\small s_2(\hat{\beta_1}) = `r sqrt(s2_beta_est[2,2])`$, gdzie dla pierwszego modelu jest to $\small s_1(\hat{\beta_1}) = `r model1_summary$coefficients[2,2]`$.</p>
+<p>P-wartość dla testu istotności parametru $\small \beta_1$ dla prostej regresji liniowej wynosi $\small `r model1_pvalue` < 0.05$, stąd z prawdopodobieństwem 0.95 możemy odrzucić, że $\small \beta_1 = 0$. Wykonując analogiczny test wykorzystując model z dwiema zmiennymi objaśniającymi dostajemy statystykę testową $\small |T| = `r abs(model2_t_statistic)` < `r qt(1 - (0.05)/2, 97)` = t_c$, stąd nie możemy odrzucić hipotezy, że $\small \beta_1 = 0$. Wynika to z wysokiej korelacji między zmiennymi $\small X_1$ oraz $\small X_2$. Innymi słowy, zmienna $\small X_1$ nie jest potrzebna w opisie modelu $\small Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \epsilon$. W modelu pierwszym uzyskaliśmy przeciwną sytuację, ponieważ tam już nie występowała zmienna $\small X_2$ w opisie zmiennej objaśnianej $\small Y$, stąd potrzebujemy zmienną $\small X_1$ aby opisać nasz model.</p>
+</br>
+<p>Wyznaczymy teraz odchylenie standardowe dla estymatora $\small \beta_1$ oraz moc testu dla tego parametru w obu modelach.</p>
+```{r power_fun, echo = TRUE, warning = FALSE, tidy = TRUE}
+test_power_fun <- function(p, s_beta1, beta_1 = 3) {
+  T <- beta_1 / s_beta1
+  tc <- qt(1 - 0.05/2, df = 100 - p)
+  return(pt(-tc, df = 100 - p, ncp = T) + 1 - pt(tc, df = 100 - p, ncp = T))
+}
+power_model1 <- test_power_fun(2, model1_summary$coefficients[2,2])
+power_model2 <- test_power_fun(3, sqrt(s2_beta_est[2,2]))
+```
+<p>Wyznaczone już wcześniej odchylenia standardowe wynoszą $\small s_1(\hat{\beta_1}) = `r model1_summary$coefficients[2,2]`$ oraz $\small s_2(\hat{\beta_1}) = `r sqrt(s2_beta_est[2,2])`$. Moc testu przy założeniu, że $\small \beta_1 = 3$ wynosi $\small `r power_model1`$ dla modelu zredukowanego oraz $\small `r power_model2`$ dla modelu pełnego.</p>
+<p>Wykonamy teraz 1000 niezależnych kopii błędów losowych $\small \epsilon$ z początku zadania aby wygenerować 1000 niezależnych zmiennych odpowiedzi $\small Y$. Dla każdej z nich wyznaczymy parametr $\small \beta_1$ oraz wykonamy test istotności $\small \beta_1$ dla modelu z jedną zmienną objaśniającą oraz dla modelu z dwoma zmiennymi objaśniającymi. Wykorzystamy uzyskane dane aby wyestymować teoretyczne odchylenie standardowe $\small s(\beta_1)$ jak i moc testu dla parametru $\small \beta_1$ wyznaczone w poprzednim paragrafie.</p>
+```{r 1000test, echo = TRUE, warning= FALSE, tidy = TRUE}
+Y_1000 <- lapply(1:1000, function(x) 3*X[,1] + rnorm(100))
+beta_model2 <- lapply(1:1000, function(x) beta_fun(plan_matrix, Y_1000[[x]]))
+sd_est_beta1_model2 <- sd(sapply(1:1000, function(x) beta_model2[[x]][2]))
+beta_model1 <- sapply(1:1000, function(x) lm(Y_1000[[x]]~X[,1])$coefficients[2]) 
+sd_est_beta1_model1 <- sd(beta_model1)
+
+sd_est_model2 <- sapply(1:1000, function(x) s_fun(Y_1000[[x]], plan_matrix, beta_model2[[x]]))
+s2_beta1_model2 <- sapply(1:1000, function(x) s2_beta_fun(sd_est_model2[[x]], plan_matrix)[2,2])
+t_statistic_model2 <- sapply(1:1000, function(x) beta_model2[[x]][2]/sqrt(s2_beta1_model2[x]))
+tc <- qt(1 - 0.05/2, df = 97)
+power_est_vector_model2 <- sapply(1:1000, function(x) abs(t_statistic_model2[x]) > tc)
+power_est_model2 <- sum(power_est_vector_model2)/1000
+
+p_value_model1 <- sapply(1:1000, function(x) summary(lm(Y_1000[[x]]~X[,1]))$coefficients[2,4])
+power_est_vector_model1 <- sapply(1:1000, function(x) p_value_model1[x] < 0.05)
+power_est_model1 <- sum(power_est_vector_model1)/1000
+```
+<p>Wyestymowane odchylenie standardowe dla modelu zredukowanego wynosi $\small `r sd_est_beta1_model1`$, co jest bliskie teoretycznemu odchyleniu standardowemu, które wynosi $\small `r model1_summary$coefficients[2,2]`$. Dla modelu z dwiema zmiennymi objaśniającymi sytuacja jest podobna, wyestymowane odchylenie standardowe wynosi $\small `r sd_est_beta1_model2`$, natomiast teoretyczne odchylenie standardowe wynosi $\small `r sqrt(s2_beta_est[2,2])`$.</p>
+<p>Estymacja mocy testu także dała dobre wyniki. Dla modelu zredukowanego teoretyczna moc testu wyniosła $\small `r power_model1`$, natomiast wyestymowana moc testu wyniosła $\small `r power_est_model1`$, co jest bardzo zbliżone do wyniku teoretycznego. W przypadku modelu z dwiema zmiennymi objaśniającymi, wyestymowana moc testu wyniosła $\small `r power_est_model2`$, co ponownie jest bliskie teoretycznej mocy testu, która wynosi $\small `r power_model2`$</p>
+
+<p>Przez najbliższe zadania będziemy zajmować się zbiorem danych zawierającym dane pacjentów. Dla każdego z nich posiadamy informację o wieku, dotkliwości choroby, lęku oraz poziomie zadowolenia.</p>
+```{r data_1, echo = TRUE, warning = FALSE, tidy = TRUE}
+patients <- read.table("CH06PR15.txt", header = FALSE, col.names = c("age", "severity", "anxiety", "satisfaction"))
+```
+<h2>Zadanie 5</h2>
+<p>W poniższym zadanu wykorzystamy regresję liniową do opisania zadowolenia pacjentów, gdzie zmiennymi opisującymi będą wiek, dotkliwość choroby oraz lęk.</p>
+```{r ex5linMod, echo = TRUE, warning = FALSE, tidy = TRUE}
+plan_matrix <- matrix(c(rep(1, dim(patients)[1]), patients$age, patients$severity, patients$anxiety), dim(patients)[1], 4)
+beta_est <- beta_fun(plan_matrix, patients$satisfaction)
+Y_est <- beta_est[1] + beta_est[2]*patients$age + beta_est[3]*patients$severity + beta_est[4]*patients$anxiety
+ 
+SSM <- sum((Y_est - mean(patients$satisfaction))^2)
+SST <- sum((patients$satisfaction - mean(patients$satisfaction))^2)
+R2 <- SSM/SST
+
+SSE <- SST - SSM
+F_stat <- (SSM/3)/(SSE/(nrow(plan_matrix) - 4))
+p_value <- 1 - pf(F_stat, 3, nrow(plan_matrix) - 4)
+```
+<p>Równanie opisujące naszą relację opisane jest poniższym równaniem:</p>
+$$
+\hat{Y} = \hat{\beta_0} + \hat{\beta_1}X_1 + \hat{\beta_2}X_2 + \hat{\beta_3}X_3 = `r beta_est[1]` `r beta_est[2]`X_1 + `r beta_est[3]`X_2 + `r beta_est[4]`X_3 .
+$$
+<p>Współczynnik determinacji $\small R^2$ dla naszej relacji wynosi $\small `r R2`$, stąd wniosek, że nasz model nie radzi sobie najlepiej z opisaniem tej relacji.</p>
+<p>W związku z tym warto sprawdzić, czy satysfakcja pacjentów zależy od tych trzech czynników. W tym celu wykonamy <em>test F</em> który testuje hipotezę:</p>
+$$
+H_0: \beta_1 = \beta_2 = \beta_3 = 0 \ \  ; \ \ H_1: (\exists \beta_i)\beta_i \neq 0 .
+$$
+<p>Czyli sprawdzamy, czy istnieje $\small \beta_i$ które jest nie zerowe, czyli sprawdzamy czy nasza relacja zależy od tego współczynnika.</p>
+<p>Statystyka testowa wynosi:</p>
+$$
+F = \frac{MSM}{MSE} = `r F_stat`.
+$$
+<p>Jeżeli zachodzi hipoteza zerowa, to nasza statystyka ma rozkład Fishera-snedecora z 3 ($\small dfM$) oraz 42 ($\small dfE$) stopniami swobody. Stąd uzyskujemy p-wartość równą $`r p_value`$. Ponieważ jest to wartość bardzo bliska zera, stąd możemy mieć pewność, że hipoteza zerowa nie zachodzi. Oznacza to, że któreś z $\small \beta_i$ istotnie opisuje naszą relację.</p>
+
+<h2>Zadanie 6</h2>
+<p>Zajmiemy się teraz konstrukcją 95% przedziałów ufności dla każdej ze zmiennych opisujących nasz model.</p>
+```{r confints_ex6, echo = TRUE, warning = FALSE, tidy = TRUE}
+tc <- qt(1 - 0.05/2, nrow(plan_matrix) - 4)
+s_est <- s_fun(patients$satisfaction, plan_matrix, beta_est)
+s_beta <- sqrt(diag(s2_beta_fun(s_est, plan_matrix))) #risky
+confints <- sapply(1:3, function(x) c(beta_est[x+1] - tc*s_beta[x+1], beta_est[x+1] + tc*s_beta[x+1]))
+```
+<h4>Współczynnik $\small \beta_1$</h4>
+<p>Przedział ufności dla współczynnika $\small \beta_1$ jest postaci:</p>
+$$
+[`r confints[1,1]` \ , \ `r confints[2,1]`].
+$$
+<h4>Współczynnik $\small \beta_2$</h4>
+<p>Przedział ufności dla współczynnika $\small \beta_2$ jest postaci:</p>
+$$
+[`r confints[1,2]` \ , \ `r confints[2,2]`].
+$$
+<h4>Współczynnik $\small \beta_3$</h4>
+<p>Przedział ufności dla współczynnika $\small \beta_3$ jest postaci:</p>
+$$
+[`r confints[1,3]` \ , \ `r confints[2,3]`].
+$$
+<p>Teraz wykonamy testy istotności poszczególnych zmiennych, to znaczy wykonamy 3 testy dla $\small i \in \{ 1,2,3\}$ o hipotezach:</p>
+$$
+H^i_0: \beta_i = 0 \ \  ; \ \ H^i_1: \beta_i \neq 0 .
+$$
+<p>Będziemy to testować statystyką $\small T_i$ postaci:</p>
+$$
+T_i = \frac{\hat{\beta_i}}{s(\hat{\beta_i})} ,
+$$
+<p>gdzie $\small s^2(\hat{\beta_i}) = s^2(\mathbb{X}'\mathbb{X})^{-1}_{i+1, i+1}$.</p>
+<p>Przy prawdziwości hipotezy zerowej, powyższa statystyka ma rozkład studenta z 42 ($\small n - p$) stopniami swobody. Stąd możemy wyliczyć p-wartość za pomocą poniższego wzoru:</p>
+$$
+p_i = P(|z| > |T_i|),
+$$
+<p>gdzie $\small z$ ma rozkład studenta z $\small n - p$ stopniami swobody.</p>
+```{r tests_ex6, echo = TRUE, warning = FALSE, tidy = TRUE}
+T_stats <- sapply(1:3, function(x) beta_est[x+1]/s_beta[x+1])
+p_values <- sapply(1:3, function(x) 2*(1 - pt(abs(T_stats[x]), 42))) 
+```
+<h4>Współczynnik $\small \beta_1$</h4>
+<p>Dla współczynnika $\small \beta_1$ statystyka testowa wynosi $\small `r T_stats[1]`$ oraz p-wartość wynosi $\small `r p_values[1]`$, stąd nie możemy na 95% stwierdzić, że współczynnik $\small \beta_1$ jest istotny, ale już na 90% możemy.</p>
+
+<h4>Współczynnik $\small \beta_2$</h4>
+<p>Dla współczynnika $\small \beta_2$ statystyka testowa wynosi $\small `r T_stats[2]`$ oraz p-wartość wynosi $\small `r p_values[2]`$. Ponieważ jest to bardzo duża liczba, stąd nie możemy stwierdzić, że $\small \beta_2$ jest istotna w opisie zadowolenia pacjentów.</p>
+
+<h4>Współczynnik $\small \beta_3$</h4>
+<p>Dla współczynnika $\small \beta_3$ statystyka testowa wynosi $\small `r T_stats[3]`$ oraz p-wartość wynosi $\small `r p_values[3]`$, stąd na 95% możemy stwierdzić, że współczynnik $\small \beta_3$ jest istotny w opisie zadowolenia pacjentów. To znaczy, lęk istotnie wpływa na zadowolenie pacjentów.</p>
+
+<p>Analizując uzyskane wyniki możemy zauważyć, że im lepsza p-wartość tym nasze przedziały ufności są bardziej oddalone on zera. Porównując testy dla poszczególnych zmiennych do ogólnego testu F, możemy dojść do oczekiwanych wniosków. Mianowicie, za pomocą testu F jasno wykazaliśmy, że istnieje pewna zależność między zadowoleniem pacjentów a pozostałymi trzema czynnikami. Analizując już dokładniej istotność poszczególncyh zmiennych, zauważyliśmy, że lęk jest jedną z tych zmiennych, która wyraźnie wpływa na zadowolenie.</p>
+
+<p>Sprawdzimy teraz, że wyniki jakie uzyskaliśmy w dwóch powyższych zadaniach zgadzają się z wynikami jakie uzyskalibyśmy licząc wszystko za pomocą wbudowanych komend. Wyniki zaprezentujemy w poniższej tabeli:</p>
+```{r table_ex5_6, echo = TRUE, warning = FALSE, tidy = TRUE}
+model <- lm(patients$satisfaction ~ patients$age + patients$severity + patients$anxiety)
+s_model <- summary(model)
+confints_m <- confint(model)
+
+column1 <- c(beta_est, R2, F_stat, confints[,1:3], T_stats[1], p_values[1], T_stats[2], p_values[2], T_stats[3], p_values[3])
+column2 <- c(model$coefficients, s_model$r.squared, s_model$fstatistic[1], confints_m[2,], confints_m[3,], confints_m[4,], s_model$coefficients[2,3:4], s_model$coefficients[3,3:4], s_model$coefficients[4,3:4])
+
+table <- data.frame(column1, column2)  
+rows <- c("$\\hat{\\beta_0}$", "$\\hat{\\beta_1}$", "$\\hat{\\beta_2}$", "$\\hat{\\beta_3}$", "$R^2$", "$F$", "$\\beta_1$ L confint", "$\\beta_1$ R confint", "$\\beta_2$ L confint", "$\\beta_2$ R confint", "$\\beta_3$ L confint", "$\\beta_3$ R confint", "$T_1$", "$T_1$(p-value)", "$T_2$", "$T_2$(p-value)", "$T_3$", "$T_3$(p-value)")
+row.names(table) <- rows
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("Ręcznie","Komendy"))
+```
+
+<h2>Zadanie 7</h2>
+<p>W poniższym zadaniu wyznaczymy cztery wykresy, aby wstepnie przeanalizować czy zachodzą pewne nietypowe tendencje w danych oraz żeby znaleźć wartości odstające.</p>
+
+<h4>$\small e \sim \hat{Y}$</h4>
+<p>Zaczniemy od wykresu residuuów i przewidywanych wartości zmiennej objaśnianej.</p>
+```{r eY_char, echo = TRUE, warning = FALSE, tidy = TRUE}
+colors <- rep("black", length(Y_est))
+colors[c(37,28)] <- "red"
+plot(model$residuals, Y_est, col = colors)
+```
+
+<h4>$\small e \sim X_1$</h4>
+<p>Wyznaczymy teraz wykres residuuów oraz pierwszej zmiennej objaśniającej.</p>
+```{r eX1_char, echo = TRUE, warning = FALSE, tidy = TRUE}
+plot(model$residuals, patients$age, col = colors)
+```
+
+<h4>$\small e \sim X_2$</h4>
+<p>Wyznaczymy teraz wykres residuuów oraz drugiej zmiennej objaśniającej.</p>
+```{r eX2_char, echo = TRUE, warning = FALSE, tidy = TRUE}
+plot(model$residuals, patients$severity, col = colors)
+```
+
+<h4>$\small e \sim X_3$</h4>
+<p>Wyznaczymy teraz wykres residuuów oraz drugiej zmiennej objaśniającej.</p>
+```{r eX3_char, echo = TRUE, warning = FALSE, tidy = TRUE}
+plot(model$residuals, patients$anxiety, col = colors)
+```
+<p>Na wszystkich wykresach zaznaczyliśmy dwa punkty, które zdają się najbardziej oddzielać od reszty. Mają stosunkowo duże residuum wynoszące ponad $\small 0.4$. Mają one też zbliżone wartości dla zmiennych zależnych, stąd wniosek, że mogą być błędami danych bądź nasz model jest źle dopasowany dla takiej grupy pacjentów. Poza tym większość danych ma residua w przedziale $\small (-0.2, 0.2)$, więc można uznać, że w ogólności dopasowany model dobrze przybliża nasze dane.</p>
+
+<h2>Zadanie 8</h2>
+<p>W poniższym zadaniu przetestujemy normalność residuów przy pomocy testu Shapiro-Wilka, który stosowaliśmy w poprzednim raporcie.</p>
+```{r S-W_test, echo = TRUE, warning = FALSE, tidy = TRUE}
+SW_test <- shapiro.test(model$residuals)
+```
+<p>Ponieważ p-wartość powyższego testu jest równa $\small `r SW_test$p.value` > 0.05$, stąd wniosek, że rozkład residuów jest normalny.</p>
+
+<p>Przez następne zadania będziemy zajmować się zbiorem danych studentów informatyki. Dla każdego studenta mamy informację o jego numerze indeksu, płci, GPA, HSM, HSS, HSE, SATM oraz SATV.</p>
+```{r data2, echo = TRUE, warning = FALSE, tidy = TRUE}
+students <- read.table("csdata.txt", col.names = c("id", "GPA", "HSM", "HSS", "HSE", "SATM", "SATV", "SEX"))
+```
+<h2>Zadanie 9</h2>
+<p>W poniższym zadaniu skonstruujemy dwa modele, pierwszy przewidujący GPA na podstawie HSM, HSS i HSE. Drugi natomiast przewidujący GPA na podstawie SATM, SATV, HSM, HSS i HSE.</p>
+```{r models_ex9, echo = TRUE, warning = FALSE, tidy = TRUE}
+modelR <- lm(GPA~HSM+HSS+HSE, students)
+modelF <- lm(GPA~HSM+HSS+HSE+SATM+SATV, students)
+```
+<p>Wyznaczymy teraz różnicę pomiędzy SSE dla obu modeli w celu skonstruowania statystyki F testującej czy zmienne SATM i SATV są istotne w pełnym modelu.</p>
+```{r testF_ex9, echo = TRUE, warning = FALSE, tidy = TRUE}
+
+SSE_fun <- function(model) {
+  return(sum(model$residuals^2))
+}
+
+SSE_R <- SSE_fun(modelR)
+SSE_F <- SSE_fun(modelF)
+
+F_stat <- (SSE_R - SSE_F)/(2*SSE_F/218)
+
+p_value <- 1 - pf(F_stat, 2, 218)
+```
+<p>SSE dla modelu pełnego wynosi $\small `r SSE_F`$, natomiast dla modelu zredukowanego wynosi  $\small `r SSE_R`$. Korzystając z nich wyznaczamy statystykę testową F, która wynosi $\small `r F_stat`$. Uzyskujemy stąd p-wartość równą $\small `r p_value`$. Wniosek stąd taki, że nie możemy odrzucić hipotezy zerowej, że $\small \beta_{SATM} = \beta_{SATV} = 0$. Stąd prawdopodobnie zmienne SATM i SATV nie są istotne przy opisie GPA studentów.</p>
+
+<p>Skorzystamy teraz z funkcji <em>anova</em> aby wyznaczyć tą samą statystykę.</p>
+```{r anova_fun_ex9, echo = TRUE, warning = FALSE, tidy = TRUE}
+anova <- anova(modelR, modelF)
+
+F_stat_a <- anova$F[2]
+F_df_a <- c(anova$Df[2], anova$Res.Df[2])
+p_value_a <- anova$`Pr(>F)`[2]
+```
+<p>Wykorzystując wbudowaną komendę anova uzyskaliśmy takie same wyniki, to znaczy, statystyka F wynosi $\small `r F_stat_a`$, stopnie swobody dla statystyki F o rozkładzie Fishera-Snedecora wynoszą $\small `r F_df_a[1]`$ i $\small `r F_df_a[2]`$ oraz p-wartość wynosi $\small `r p_value_a`$. Uzyskujemy stąd takie same wnioski jak poprzednio, to znaczy, nie odrzucamy hipotezy zerowej.</p>
+
+<h2>Zadanie 10</h2>
+<p>W poniższym zadaniu skonstuujemy model opisujący GPA na podstawie SATM, SATV, HSM oraz HSS. Na jego podstawie wyznaczymy sumy kwadratów typu pierwszego jak i drugiego. Wyniki zaprezentujemy w poniższej tabelce:</p>
+```{r SS_calc, echo = TRUE, warning = FALSE, tidy = TRUE}
+model <- lm(GPA~SATM+SATV+HSM+HSE+HSS, students)
+anovaF <- anova(model)
+AnovaF <- Anova(model)
+SS1 <- anovaF$`Sum Sq`[1:5]
+SS2 <- AnovaF$`Sum Sq`[1:5]
+
+column1 <- SS1
+column2 <- SS2
+
+table <- data.frame(column1, column2)  
+rows <- c("SATM", "SATV", "HSM", "HSE", "HSS")
+row.names(table) <- rows
+knitr::kable(table, row.names = TRUE, escape = FALSE, format = "pipe", align = "c", col.names = c("Sumy kwadratów typu I", "Sumy kwadratów typu II"))
+```
+<p>Zweryfikujemy teraz, że suma kwadratów typu pierwszego dla zmiennej HSM jest równa różnicy SSM dla modelu opisującego GPA za pomocą SATM, SATV oraz HSM(model 1) oraz SSM dla modelu opisującego GPA za pomocą SATM oraz SATV(model 2).</p>
+```{r SSM_HSM, echo = TRUE, warning = FALSE, tidy = TRUE}
+model1 <- lm(GPA~SATM+SATV+HSM, students)
+model2 <- lm(GPA~SATM+SATV, students)
+
+HSM <- sum(anova(model1)$`Sum Sq`[1:3]) - sum(anova(model2)$`Sum Sq`[1:2])
+```
+<p>Przypomnijmy, że dla modelu rozważanego na początku zadania suma kwadratów pierwszego rodzaju dla zmiennej HSM wyniosła $\small `r SS1[3]`$. Zachodzi wzór:</p>
+$$
+\small SSM_1(X_3) = SSM(X_3|X_1,X_2) = SSM(X_1,X_2,X_3) - SSM(X_1,X_2) = SSM_{model1} - SSM_{model2},
+$$
+<p>gdzie $\small SSM_1(X_3)$ to suma kwadratów pierwszego rodzaju dla trzeciej zmiennej objaśniającej w modelu, $\small SSM_{modelx}$ to suma kwadratów dla modelu $\small x$, gdzie $\small x \in \{1,2 \}$. Weryfikujemy go dla naszego przykładu, gdzie zmienne $\small X_1, X_2, X_3$, to odpowiednio SATM, SATV oraz HSM. Rzeczywiście, $\small SSM_{model1} - SSM_{model2}$ wynosi $\small `r HSM`$, co jest równe $\small SSM_1(X_3)$.</p>
+<p>Zauważmy, że w tabelce z sumami kwadratów jedyne wyniki jakie są sobie równe dla pierwszego i drugiego rodzaju znajdują się w ostatniej kolumnie. Nie jest to przypadek, wynika to z poniższych równości:</p>
+$$
+\small SSM_1(X_{p-1}) = SSM(X_{p-1}|X_1, X_2 ,\ldots,X_{p-2}) = SSM_2(X_{p-1}),
+$$
+<p>gdzie $\small SSM_x(X_{p-1})$ to sumy kwadratów typu $\small x \in \{1,2\}$. Intuicyjnie możemy to zrozumieć w taki sposób, że jeżeli suma kwadratów typu drugiego opisuje ile zmienności w $\small Y$ objaśnia zmienna $\small X_i$ po uwzględnieniu wpływu pozostałych $\small p - 2$ zmiennych, a suma kwadratów typu pierwszego to wpływ zmiennej $\small X_i$ po uwzględnieniu wszystkich $\small i - 1$ zmiennych przed $\small X_i$, to biorąc za $\small X_i$ ostatnią ze zmiennych w modelu tzn. $\small X_{p-1}$, bierzemy wszystkie zmienne przed $\small X_{p-1}$ żeby policzyć sumę kwadratów typu pierwszego. W ten sposób bierzemy wszystkie pozostałe zmienne w tym modelu licząc sumę kwadratów typu drugiego.</p> 
+
+<h2>Zadanie 11</h2>
+<p>W poniższym zadaniu wygenerujemy nową zmienną $\small SAT$ jako sumę zmiennych $\small SATM$ oraz $\small SATV$. Wykorzystamy ją do skonstruowania modelu liniowego, gdzie zmienną GPA będziemy objaśniać za pomocą zmiennych SATM, SATV oraz SAT.</p>
+```{r SAT_ex11, echo = TRUE, warning = FALSE, tidy = TRUE}
+students$SAT <- students$SATM + students$SATV
+model_SAT <- lm(GPA~SATM+SATV+SAT, students)
+summary(model_SAT)
+```
+<p>W wyniku nie uzyskaliśmy nic sensownego, gdyż model nie poradził sobie z wyznaczeniem współczynnika $\small \hat{\beta_3}$. Wynika to z tego, że macierz planu $\small \mathbb{X}$ jest singularna, to znaczy, nie istnieje jej odwrotność. Ponieważ $\small \hat{\beta} = (\mathbb{X}'\mathbb{X})^{-1}\mathbb{X}'Y$, stąd nie jesteśmy w stanie wyznaczyć go. Singularność macierzy $\small \mathbb{X}$ wynika z tego, że wśród jej kolumn występuje kombinacja liniowa innych kolumn. Jest nią oczywiście ostatnia kolumna ze zmienną $\small SAT$, która jest równa sumie dwóch wcześniejszych kolumn macierzy $\small \mathbb{X}$.</p>
+
+</font>
